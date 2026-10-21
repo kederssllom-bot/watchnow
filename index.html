@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050505">
+<title>شاهد الآن | WatchNow</title>
+<meta name="description" content="شاهد الآن | WatchNow - أرشيف أفلام وفيديوهات من الملكية العامة">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Cairo', 'system-ui', 'sans-serif'] },
+        colors: { brand: { DEFAULT: '#a8161d', dark: '#85111a' } }
+      }
+    }
+  };
+</script>
+<style>
+  html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+  body { background: #050505; color: #f5f5f5; font-family: 'Cairo', system-ui, sans-serif; overscroll-behavior-y: none; }
+  .glass { background: rgba(10,10,10,.55); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.08); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .slide { opacity: 0; transition: opacity .9s ease; pointer-events: none; }
+  .slide.active { opacity: 1; pointer-events: auto; }
+  .slide .bg { transform: scale(1.08); transition: transform 7s ease-out; }
+  .slide.active .bg { transform: scale(1); }
+  .card { transition: transform .25s ease, box-shadow .25s ease; }
+  @media (hover:hover) { .card:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 12px 32px rgba(0,0,0,.55); } }
+  .card:active { transform: scale(.97); }
+  .fade-in { animation: fadeIn .5s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .sheet { animation: sheetUp .35s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .skeleton { background: linear-gradient(110deg, #141414 30%, #1f1f1f 50%, #141414 70%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+</style>
+</head>
+<body class="min-h-screen antialiased">
+
+<!-- ============ الهيدر ============ -->
+<header id="topbar" class="fixed top-0 inset-x-0 z-40 transition-all duration-300">
+  <div class="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
+    <a href="#" class="shrink-0 flex flex-col leading-none"><span class="text-xl font-black text-white">شاهد الآن</span><span class="text-[11px] font-semibold tracking-widest text-brand mt-1" dir="ltr">WatchNow</span></a>
+    <div class="flex-1"></div>
+    <div class="relative w-full max-w-xs">
+      <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" inputmode="search" autocomplete="off" placeholder="ابحث عن فيلم أو سنة..."
+        class="glass w-full rounded-full py-2 pr-10 pl-4 text-sm placeholder-white/40 focus:outline-none focus:border-white/25 focus:ring-0 transition">
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ السلايدر المميز ============ -->
+  <section id="hero" class="relative w-full h-[72vh] min-h-[460px] max-h-[720px] overflow-hidden bg-black">
+    <div id="slides" class="absolute inset-0"></div>
+    <div class="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#050505] to-transparent pointer-events-none"></div>
+    <div id="dots" class="absolute bottom-5 inset-x-0 flex justify-center gap-2 z-10"></div>
+  </section>
+
+  <!-- ============ الفلاتر ============ -->
+  <section class="sticky top-16 z-30 -mt-2">
+    <div class="glass">
+      <div class="max-w-7xl mx-auto px-4 py-3">
+        <div id="chips" class="flex gap-2 overflow-x-auto no-scrollbar"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ الكروت ============ -->
+  <section class="max-w-7xl mx-auto px-4 pt-6 pb-16">
+    <div id="suggest"></div>
+    <div class="flex items-end justify-between mb-4">
+      <h2 id="gridTitle" class="text-xl font-extrabold">كل الأفلام</h2>
+      <span id="count" class="text-sm text-white/50"></span>
+    </div>
+    <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4"></div>
+    <div id="empty" class="hidden text-center py-20 text-white/50">
+      <div class="text-5xl mb-3">🎞️</div>
+      <p class="font-semibold">ما لقينا نتائج مطابقة</p>
+      <p class="text-sm mt-1">جرّب كلمة ثانية أو تصنيف آخر</p>
+    </div>
+    <div id="error" class="hidden text-center py-6 text-amber-400/90 text-sm"></div>
+    <div id="sentinel" class="h-10"></div>
+  </section>
+</main>
+
+<!-- ============ الفوتر ============ -->
+<footer class="border-t border-white/10 py-8 px-4 text-center text-xs text-white/40 leading-relaxed">
+  <a href="https://t.me/WatchNow_tv" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 mb-4 px-5 py-2.5 rounded-full glass text-sm font-bold text-white/85 hover:bg-white/10 active:scale-95 transition">انضم إلى قناتنا على تيليجرام</a>
+  <p>جميع المحتويات المعروضة من الملكية العامة أو برخص مفتوحة، والمصدر مذكور في كل عمل.</p>
+  <p class="mt-1">إذا كنت صاحب حقوق وترى أن عملاً ما لا يجب أن يظهر هنا، راسلنا عبر <a href="https://t.me/WatchNow_tv" target="_blank" rel="noopener noreferrer" class="underline hover:text-white/70">قناة تيليجرام</a> وسيُزال فوراً.</p>
+</footer>
+
+<!-- ============ نافذة التفاصيل ============ -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div id="modalBack" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+  <div class="absolute inset-x-0 bottom-0 sm:inset-0 sm:flex sm:items-center sm:justify-center pointer-events-none">
+    <div id="modalBody" class="sheet pointer-events-auto glass bg-[#0c0c0c]/90 w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   الإعدادات: ألصق هنا رابط جدول جوجل المنشور بصيغة CSV
+   (ملف ← مشاركة ← نشر على الويب ← اختر الورقة ثم CSV)
+   إذا تركته فاضي، يعرض البيانات التجريبية بالأسفل.
+   ===================================================================== */
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1P6bevshy-JsSb4cqrcCHk_RDinr6Uxyj2L2g0YmdvWE/edit?usp=drivesdk";
+/* رابط خدمة التقييمات (Google Apps Script) - اختياري.
+   إذا تركته فاضي: التقييم يُحفظ على جهاز كل شخص فقط. */
+const RATINGS_API_URL = "";
+const SITE_NAME = "شاهد الآن | WatchNow";
+const BATCH = 24;
+const CACHE_KEY = "media_catalog_v1";
+const FALLBACK_TELEGRAM_CHANNEL = "https://t.me/";
+
+/* بيانات تجريبية (تُستبدل تلقائياً ببيانات الجدول) */
+const SAMPLE_DATA = [];
+
+/* ====================== أدوات مساعدة ====================== */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// توحيد النص العربي للبحث (إزالة التشكيل وتوحيد الألف والياء والتاء المربوطة)
+const norm = (s) => String(s ?? "").toLowerCase()
+  .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+  .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه")
+  .replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+  .trim();
+
+// جلب قيمة من الصف بأكثر من اسم عمود (عربي أو إنجليزي)
+const pick = (row, keys) => {
+  for (const k of keys) {
+    const found = Object.keys(row).find(r => r.trim().toLowerCase() === k.toLowerCase());
+    if (found && String(row[found]).trim()) return String(row[found]).trim();
+  }
+  return "";
+};
+
+// تحويل رابط مشاركة درايف إلى رابط صورة مباشر
+function posterUrl(raw) {
+  if (!raw) return "";
+  const u = raw.trim();
+  const m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/) || u.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?[^#]*id=([\w-]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w600`;
+  if (/^https?:\/\//i.test(u) || /^[\w./-]+\.(webp|jpg|jpeg|png|avif)$/i.test(u)) return u;
+  return "";
+}
+
+// تحقق من رابط تيليجرام
+function tgUrl(raw) {
+  if (!raw) return "";
+  let u = raw.trim();
+  if (/^(t\.me|telegram\.me)\//i.test(u)) u = "https://" + u;
+  return /^https?:\/\/(t|telegram)\.me\/.+/i.test(u) ? u : "";
+}
+
+const isTrue = (v) => ["نعم", "yes", "true", "1", "y", "✓", "✔"].includes(String(v).trim().toLowerCase());
+
+/* ====================== الحالة ====================== */
+let ITEMS = [];
+let activeCat = "الكل";
+let query = "";
+let filtered = [];
+let shown = 0;
+let slideIdx = 0, slideTimer = null;
+
+/* ====================== تحويل الصفوف إلى عناصر ====================== */
+function buildItems(rows) {
+  const out = [];
+  rows.forEach((row) => {
+    const title = pick(row, ["العنوان", "title"]);
+    if (!title) return; // تجاهل الصف الناقص
+    const tags = pick(row, ["التصنيف", "category"]).split(/[،,|]/).map(t => t.trim()).filter(Boolean);
+    out.push({
+      id: out.length,
+      title,
+      year: pick(row, ["السنة", "year"]),
+      tags,
+      desc: pick(row, ["الوصف", "description"]),
+      poster: posterUrl(pick(row, ["البوستر", "poster"])),
+      link: tgUrl(pick(row, ["رابط تيليجرام", "رابط", "link", "telegram"])),
+      license: pick(row, ["المصدر/الرخصة", "المصدر", "الرخصة", "license", "source"]),
+      featured: isTrue(pick(row, ["مميز", "featured"])),
+      search: norm([title, pick(row, ["السنة", "year"]), pick(row, ["التصنيف", "category"]), pick(row, ["الوصف", "description"])].join(" "))
+    });
+  });
+  return out;
+}
+
+/* ====================== رابط الجدول ====================== */
+// يقبل رابط المشاركة العادي أو رابط النشر (CSV) ويحوله لرابط قراءة مناسب
+function sheetUrl(u) {
+  if (!u) return "";
+  if (/output=csv|tqx=out:csv/i.test(u)) return u;
+  const m = u.match(/spreadsheets\/d\/([\w-]+)/);
+  if (!m) return u;
+  const g = u.match(/[#&?]gid=(\d+)/);
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&headers=1${g ? "&gid=" + g[1] : ""}`;
+}
+
+/* ====================== قراءة الجدول (طريقتان) ====================== */
+async function fetchSheetRows(u) {
+  try {
+    const res = await fetch(sheetUrl(u), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("not csv");
+    return Papa.parse(text, { header: true, skipEmptyLines: "greedy" }).data;
+  } catch (e) {
+    // الطريقة الثانية: تعمل حتى لو منع المتصفح الطلب المباشر
+    const id = (u.match(/spreadsheets\/d\/([\w-]+)/) || [])[1];
+    if (!id) throw e;
+    return await jsonpRows(id, (u.match(/[#&?]gid=(\d+)/) || [])[1]);
+  }
+}
+function jsonpRows(id, gid) {
+  return new Promise((resolve, reject) => {
+    const cb = "__sheet_cb_" + Date.now();
+    const sc = document.createElement("script");
+    const done = () => { try { delete window[cb]; } catch (_) { window[cb] = undefined; } sc.remove(); };
+    const timer = setTimeout(() => { done(); reject(new Error("timeout")); }, 15000);
+    window[cb] = (resp) => {
+      clearTimeout(timer); done();
+      try {
+        if (!resp || resp.status !== "ok") throw new Error("bad response");
+        const cols = resp.table.cols.map(c => (c.label || "").trim());
+        resolve(resp.table.rows.map(r => {
+          const o = {};
+          cols.forEach((c, i) => { const cell = r.c && r.c[i]; o[c] = cell ? (cell.v ?? cell.f ?? "") : ""; });
+          return o;
+        }));
+      } catch (e) { reject(e); }
+    };
+    sc.onerror = () => { clearTimeout(timer); done(); reject(new Error("script error")); };
+    sc.src = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=responseHandler:${cb}&headers=1${gid ? "&gid=" + gid : ""}`;
+    document.head.appendChild(sc);
+  });
+}
+
+/* ====================== جلب البيانات ====================== */
+async function loadData() {
+  // 1) اعرض النسخة المحفوظة فوراً إن وُجدت
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch (_) {}
+  if (cached && cached.length) { ITEMS = buildItems(cached); initUI(); }
+  else { showSkeleton(); }
+
+  // 2) جلب النسخة الحديثة
+  try {
+    let rows;
+    if (!SHEET_CSV_URL) {
+      rows = SAMPLE_DATA;
+    } else {
+      rows = await fetchSheetRows(SHEET_CSV_URL);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(rows)); } catch (_) {}
+    }
+    ITEMS = buildItems(rows);
+    initUI();
+  } catch (err) {
+    console.error(err);
+    if (!ITEMS.length) {
+      initUI();
+      showError("تعذر تحميل المحتوى حالياً. حدّث الصفحة بعد قليل.");
+    } else {
+      showError("تعذر تحديث البيانات، يتم عرض آخر نسخة محفوظة.");
+    }
+  }
+}
+
+function showError(msg) { const e = $("#error"); e.textContent = msg; e.classList.remove("hidden"); }
+
+function showSkeleton() {
+  $("#grid").innerHTML = Array.from({ length: 12 }, () => `<div class="skeleton aspect-[2/3] rounded-xl"></div>`).join("");
+}
+
+/* ====================== البوستر (مع بديل أنيق) ====================== */
+function fallbackPoster(title, cls = "") {
+  return `<div class="${cls} w-full h-full flex flex-col items-center justify-center p-3 text-center bg-gradient-to-br from-[#1c1c1f] via-[#0e0e10] to-black">
+    <svg class="w-8 h-8 text-white/35 mb-2" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>
+    <span class="font-bold text-sm leading-snug text-white/90 clamp-3">${esc(title)}</span></div>`;
+}
+function posterHTML(it, cls = "") {
+  if (!it.poster) return fallbackPoster(it.title, cls);
+  return `<img src="${esc(it.poster)}" alt="${esc(it.title)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-title="${esc(it.title)}" class="${cls} w-full h-full object-cover">`;
+}
+// إذا فشلت صورة، استبدلها ببوستر بديل
+document.addEventListener("error", (e) => {
+  const t = e.target;
+  if (t && t.tagName === "IMG" && t.dataset.title) {
+    const wrap = document.createElement("div");
+    wrap.className = "w-full h-full";
+    wrap.innerHTML = fallbackPoster(t.dataset.title);
+    t.replaceWith(wrap);
+  }
+}, true);
+
+/* ====================== السلايدر ====================== */
+function buildHero() {
+  let feat = ITEMS.filter(i => i.featured);
+  if (!feat.length) feat = ITEMS.slice(0, 5);
+  feat = feat.slice(0, 6);
+  const hero = $("#hero");
+  if (!feat.length) { hero.classList.add("hidden"); return; }
+  hero.classList.remove("hidden");
+
+  $("#slides").innerHTML = feat.map((it, i) => `
+    <article class="slide absolute inset-0 ${i === 0 ? "active" : ""}" data-i="${i}">
+      <div class="bg absolute inset-0">
+        ${it.poster ? `<img src="${esc(it.poster)}" alt="" referrerpolicy="no-referrer" class="w-full h-full object-cover opacity-40 blur-[2px]" data-title="${esc(it.title)}">` : `<div class="w-full h-full bg-gradient-to-br from-[#1f1f23] via-[#0e0e10] to-black"></div>`}
+      </div>
+      <div class="absolute inset-0 bg-gradient-to-t from-[#050505] via-black/40 to-black/30"></div>
+      <div class="absolute inset-0 bg-gradient-to-l from-transparent via-black/20 to-black/70"></div>
+      <div class="relative h-full max-w-7xl mx-auto px-5 flex flex-col justify-end pb-16">
+        <div class="flex items-center gap-2 text-xs font-semibold mb-3">
+          <span class="bg-white/15 text-white/90 px-2 py-0.5 rounded">مميز</span>
+          ${it.year ? `<span class="text-white/70">${esc(it.year)}</span>` : ""}
+          ${it.tags[0] ? `<span class="text-white/70">• ${esc(it.tags[0])}</span>` : ""}
+        </div>
+        <h1 class="text-4xl sm:text-6xl font-black leading-tight drop-shadow-lg max-w-3xl">${esc(it.title)}</h1>
+        <p class="mt-3 text-sm sm:text-base text-white/75 max-w-xl clamp-3">${esc(it.desc)}</p>
+        <div class="mt-5 flex gap-3">
+          ${it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 bg-brand hover:bg-brand-dark active:scale-95 transition px-6 py-3 rounded-xl font-bold shadow-md shadow-black/30">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>مشاهدة</a>` : ""}
+          <button data-open="${it.id}" class="glass px-6 py-3 rounded-xl font-bold hover:bg-white/10 active:scale-95 transition">التفاصيل</button>
+        </div>
+      </div>
+    </article>`).join("");
+
+  $("#dots").innerHTML = feat.map((_, i) => `<button aria-label="شريحة ${i + 1}" data-dot="${i}" class="h-1.5 rounded-full transition-all ${i === 0 ? "w-8 bg-brand" : "w-3 bg-white/30"}"></button>`).join("");
+  slideIdx = 0;
+  startSlider(feat.length);
+}
+
+function goSlide(i, total) {
+  slideIdx = (i + total) % total;
+  document.querySelectorAll(".slide").forEach((s, k) => s.classList.toggle("active", k === slideIdx));
+  document.querySelectorAll("#dots button").forEach((d, k) => {
+    d.className = "h-1.5 rounded-full transition-all " + (k === slideIdx ? "w-8 bg-brand" : "w-3 bg-white/30");
+  });
+}
+function startSlider(total) {
+  clearInterval(slideTimer);
+  if (total < 2) return;
+  slideTimer = setInterval(() => goSlide(slideIdx + 1, total), 6500);
+  const hero = $("#hero");
+  let x0 = null;
+  hero.ontouchstart = (e) => { x0 = e.touches[0].clientX; };
+  hero.ontouchend = (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 50) { goSlide(slideIdx + (dx > 0 ? 1 : -1), total); startSlider(total); }
+    x0 = null;
+  };
+  $("#dots").onclick = (e) => {
+    const b = e.target.closest("[data-dot]");
+    if (b) { goSlide(+b.dataset.dot, total); startSlider(total); }
+  };
+}
+
+/* ====================== الفلاتر ====================== */
+function buildChips() {
+  const counts = {};
+  ITEMS.forEach(i => i.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  const cats = ["الكل", ...Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "ar"))];
+  $("#chips").innerHTML = cats.map(c => `
+    <button data-cat="${esc(c)}" class="shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold border transition active:scale-95
+      ${c === activeCat ? "bg-brand border-brand text-white shadow-md shadow-black/30" : "border-white/15 text-white/70 hover:border-white/40"}">${esc(c)}</button>`).join("");
+}
+
+/* ====================== الشبكة (تحميل تدريجي) ====================== */
+function applyFilters() {
+  const q = norm(query);
+  renderSuggest();
+  filtered = ITEMS.filter(i => (activeCat === "الكل" || i.tags.includes(activeCat)) && (!q || i.search.includes(q)));
+  shown = 0;
+  $("#grid").innerHTML = "";
+  $("#gridTitle").textContent = q ? "نتائج البحث" : (activeCat === "الكل" ? "كل الأفلام" : activeCat);
+  $("#count").textContent = filtered.length + " عمل";
+  $("#empty").classList.toggle("hidden", filtered.length > 0);
+  renderMore();
+}
+
+function cardHTML(it) {
+  return `<button data-open="${it.id}" class="card fade-in text-right group focus:outline-none">
+    <div class="relative aspect-[2/3] rounded-xl overflow-hidden bg-[#141414] ring-1 ring-white/10">
+      ${posterHTML(it)}
+      <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent"></div>
+      ${it.year ? `<span class="absolute top-2 left-2 glass text-[11px] font-bold px-2 py-0.5 rounded-md">${esc(it.year)}</span>` : ""}
+      ${ratingBadge(it)}
+      <div class="absolute bottom-0 inset-x-0 p-2.5">
+        <h3 class="font-bold text-sm leading-snug clamp-2">${esc(it.title)}</h3>
+        ${it.tags[0] ? `<p class="text-[11px] text-white/50 mt-0.5">${esc(it.tags[0])}</p>` : ""}
+      </div>
+    </div>
+  </button>`;
+}
+
+function renderMore() {
+  if (shown >= filtered.length) return;
+  const next = filtered.slice(shown, shown + BATCH);
+  $("#grid").insertAdjacentHTML("beforeend", next.map(cardHTML).join(""));
+  shown += next.length;
+}
+
+const io = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) renderMore();
+}, { rootMargin: "600px" });
+
+/* ====================== الفيلم المقترح (يتبدل كل 5 ساعات) ====================== */
+const SUGGEST_HOURS = 5;
+let suggestKey = "";
+function hashStr(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return h; }
+function currentSuggestion() {
+  const list = ITEMS.slice().sort((x, y) => hashStr(x.title + x.year) - hashStr(y.title + y.year));
+  if (!list.length) return null;
+  const slotMs = SUGGEST_HOURS * 3600 * 1000;
+  const slot = Math.floor(Date.now() / slotMs);
+  return { item: list[slot % list.length], slot, endsIn: (slot + 1) * slotMs - Date.now() };
+}
+function leftText(ms) {
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h} س و ${m} د` : `${m} د`;
+}
+function renderSuggest() {
+  const box = $("#suggest");
+  if (!box) return;
+  if (norm(query)) { box.innerHTML = ""; suggestKey = ""; return; } // يختفي أثناء البحث
+  const sg = currentSuggestion();
+  if (!sg) { box.innerHTML = ""; return; }
+  const it = sg.item;
+  const key = sg.slot + "|" + it.id + "|" + ITEMS.length;
+  if (key === suggestKey) { const l = $("#suggestLeft"); if (l) l.textContent = leftText(sg.endsIn); return; }
+  suggestKey = key;
+  box.innerHTML = `
+    <div class="mb-8 fade-in">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-extrabold flex items-center gap-2"><span class="w-1.5 h-5 rounded-full bg-brand"></span>فيلم مقترح لك</h2>
+        <span class="text-xs text-white/40">يتبدل بعد <span id="suggestLeft">${leftText(sg.endsIn)}</span></span>
+      </div>
+      <div class="glass rounded-2xl p-3 sm:p-4 flex gap-4 items-stretch">
+        <button data-open="${it.id}" class="card shrink-0 w-28 sm:w-36 aspect-[2/3] rounded-xl overflow-hidden ring-1 ring-white/10 bg-[#141414]" aria-label="${esc(it.title)}">${posterHTML(it)}</button>
+        <div class="flex flex-col justify-center min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2 text-xs text-white/55 mb-1.5">
+            ${it.year ? `<span>${esc(it.year)}</span>` : ""}
+            ${it.tags.slice(0, 2).map(t => `<span>• ${esc(t)}</span>`).join("")}
+          </div>
+          <h3 class="text-xl sm:text-2xl font-black leading-snug clamp-2">${esc(it.title)}</h3>
+          <p class="mt-2 text-sm text-white/65 leading-relaxed clamp-3">${esc(it.desc)}</p>
+          <div class="mt-4 flex gap-2">
+            ${it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 bg-brand hover:bg-brand-dark active:scale-95 transition px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-black/30">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>شاهد الآن</a>` : ""}
+            <button data-open="${it.id}" class="glass px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-white/10 active:scale-95 transition">التفاصيل</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+setInterval(renderSuggest, 60000);
+
+/* ====================== التقييم (5 نجوم) ====================== */
+const MY_KEY = "media_my_ratings_v1", AGG_KEY = "media_agg_ratings_v1", UID_KEY = "media_uid_v1";
+let MY = {}, AGG = {}, modalItem = null;
+try { MY = JSON.parse(localStorage.getItem(MY_KEY) || "{}"); } catch (_) {}
+try { AGG = JSON.parse(localStorage.getItem(AGG_KEY) || "{}"); } catch (_) {}
+function getUid() {
+  try {
+    let u = localStorage.getItem(UID_KEY);
+    if (!u) { u = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem(UID_KEY, u); }
+    return u;
+  } catch (_) { return "anon-" + Math.random().toString(36).slice(2); }
+}
+const filmKey = (it) => "f" + hashStr(it.title + "|" + it.year).toString(36);
+function ratingBadge(it) {
+  const a = AGG[filmKey(it)];
+  return a && a.count ? `<span class="absolute top-2 right-2 glass text-[11px] font-bold px-2 py-0.5 rounded-md text-amber-400">★ ${Number(a.avg).toFixed(1)}</span>` : "";
+}
+function ratingInner(it) {
+  const key = filmKey(it), mine = MY[key] || 0, a = AGG[key];
+  const stars = [1, 2, 3, 4, 5].map(n => `<button type="button" data-star="${n}" aria-label="${n} من 5" class="p-0.5 transition active:scale-90 ${n <= mine ? "text-amber-400" : "text-white/25"}">
+      <svg class="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.95 6 6.55.95-4.75 4.62 1.12 6.53L12 17.5l-5.87 3.1 1.12-6.53L2.5 9.45l6.55-.95z"/></svg></button>`).join("");
+  let line;
+  if (a && a.count) line = `<span class="text-amber-400 font-bold">★ ${Number(a.avg).toFixed(1)}</span> <span class="text-white/45">(${a.count} تقييم)</span>${mine ? ` <span class="text-white/45">• تقييمك ${mine}</span>` : ""}`;
+  else if (mine) line = `<span class="text-white/55">تقييمك: ${mine} من 5</span>`;
+  else line = `<span class="text-white/45">اضغط على نجمة لتقييم الفيلم</span>`;
+  return `<div class="flex">${stars}</div><div class="text-[11px] mt-0.5">${line}</div>`;
+}
+function paintRating(it) {
+  const box = $("#ratingBox");
+  if (box && modalItem === it) box.innerHTML = ratingInner(it);
+}
+async function rate(n) {
+  const it = modalItem;
+  if (!it) return;
+  const key = filmKey(it);
+  MY[key] = n;
+  try { localStorage.setItem(MY_KEY, JSON.stringify(MY)); } catch (_) {}
+  paintRating(it);
+  if (!RATINGS_API_URL) return;
+  try {
+    const res = await fetch(RATINGS_API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ key, uid: getUid(), stars: n }) });
+    const j = await res.json();
+    if (j && j.ok) {
+      AGG[key] = { avg: j.avg, count: j.count };
+      try { localStorage.setItem(AGG_KEY, JSON.stringify(AGG)); } catch (_) {}
+      paintRating(it);
+    }
+  } catch (err) { console.error(err); }
+}
+async function loadRatings() {
+  if (!RATINGS_API_URL) return;
+  try {
+    const res = await fetch(RATINGS_API_URL, { cache: "no-store" });
+    const j = await res.json();
+    if (j && j.ok && j.ratings) {
+      AGG = j.ratings;
+      try { localStorage.setItem(AGG_KEY, JSON.stringify(AGG)); } catch (_) {}
+      if (ITEMS.length) applyFilters();
+    }
+  } catch (err) { console.error(err); }
+}
+
+/* ====================== نافذة التفاصيل ====================== */
+function openModal(id) {
+  const it = ITEMS[id];
+  if (!it) return;
+  modalItem = it;
+  $("#modalBody").innerHTML = `
+    <div class="relative overflow-hidden rounded-t-3xl">
+      <div class="absolute inset-0">
+        ${it.poster ? `<img src="${esc(it.poster)}" alt="" referrerpolicy="no-referrer" data-title="${esc(it.title)}" class="w-full h-full object-cover opacity-30 blur-xl scale-125">` : `<div class="w-full h-full bg-gradient-to-br from-[#1f1f23] to-black"></div>`}
+        <div class="absolute inset-0 bg-gradient-to-t from-[#0c0c0c] via-[#0c0c0c]/60 to-transparent"></div>
+      </div>
+      <button id="closeModal" aria-label="إغلاق" class="absolute top-3 left-3 z-10 glass w-10 h-10 rounded-full flex items-center justify-center text-lg active:scale-90 transition">✕</button>
+      <div class="relative px-5 pt-14 pb-5 flex gap-4 items-end">
+        <div class="w-32 sm:w-40 shrink-0 aspect-[2/3] rounded-xl overflow-hidden ring-1 ring-white/15 shadow-2xl shadow-black/70 bg-[#141414]">${posterHTML(it)}</div>
+        <div class="min-w-0 pb-1">
+          <h2 class="text-2xl sm:text-3xl font-black leading-snug">${esc(it.title)}</h2>
+          <div class="flex flex-wrap items-center gap-2 mt-3 text-xs">
+            ${it.year ? `<span class="glass px-3 py-1 rounded-full font-bold">${esc(it.year)}</span>` : ""}
+            ${it.tags.map(t => `<span class="px-3 py-1 rounded-full bg-white/10 text-white/75 font-medium">${esc(t)}</span>`).join("")}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="px-5 pb-6">
+      <h3 class="text-sm font-bold text-white/50 mb-2">القصة</h3>
+      <p class="text-white/85 leading-loose text-[15px]">${esc(it.desc) || "لا يوجد وصف."}</p>
+      ${it.license ? `<p class="mt-4 text-xs text-white/40">المصدر / الرخصة: ${esc(it.license)}</p>` : ""}
+      <div class="mt-6 pt-5 border-t border-white/10 flex items-center gap-4">
+        ${it.link
+          ? `<a href="${esc(it.link)}" target="_blank" rel="noopener noreferrer" class="shrink-0 flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark active:scale-95 transition px-6 py-3.5 rounded-xl font-bold shadow-md shadow-black/30">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>مشاهدة</a>`
+          : `<div class="shrink-0 text-center px-5 py-3.5 rounded-xl bg-white/5 text-white/40 font-semibold">الرابط غير متوفر</div>`}
+        <div id="ratingBox" class="min-w-0">${ratingInner(it)}</div>
+      </div>
+    </div>`;
+  $("#modalBody").scrollTop = 0;
+  $("#modal").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeModal() {
+  modalItem = null;
+  $("#modal").classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+/* ====================== الأحداث ====================== */
+document.addEventListener("click", (e) => {
+  const star = e.target.closest("[data-star]");
+  if (star) return rate(+star.dataset.star);
+  const open = e.target.closest("[data-open]");
+  if (open) return openModal(+open.dataset.open);
+  const cat = e.target.closest("[data-cat]");
+  if (cat) { activeCat = cat.dataset.cat; buildChips(); applyFilters(); window.scrollTo({ top: $("#chips").offsetTop - 80, behavior: "smooth" }); return; }
+  if (e.target.id === "modalBack" || e.target.closest("#closeModal")) closeModal();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+let searchTimer;
+$("#search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { query = e.target.value; applyFilters(); }, 180);
+});
+
+window.addEventListener("scroll", () => {
+  $("#topbar").classList.toggle("glass", window.scrollY > 40);
+}, { passive: true });
+
+/* ====================== التشغيل ====================== */
+function initUI() {
+  buildHero();
+  buildChips();
+  applyFilters();
+}
+io.observe($("#sentinel"));
+loadData();
+loadRatings();
+</script>
+</body>
+</html>
